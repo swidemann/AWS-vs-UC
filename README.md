@@ -36,7 +36,7 @@ por ejemplo:
 En Generator.py, la linea 16
 
     'noshow = False  # False or True'
-define si se considera noshow o no (noshow= True: existe noshow, noshow=False= no existe noshow)
+define si se considera noshow o no (noshow= True: existe noshow, noshow=False: no existe noshow)
 
 la linea 18 
 
