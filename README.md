@@ -22,15 +22,15 @@ por ejemplo:
 
     'python ./FSC_sb_QTb_proactive_nfv_SingleSat.py d4s20 air4 ConsBinCont simpleL 3 1 partial'
 
-1.<modelo.py> archivo con el modelo a resolver
-2.<instance> instancia a resolver, formato d{#dias}s{#escenarios}
-3.air<# airports> cantidad de aeropuertos considerados, formato air{#aeropuertos}
-4.<consolidate> consolidación de carga, opciones son Default (default) o ConsBinCont (consolidar y despues relajar)
-5.<Lmethod> calculo de L, simpleL basta ya que el sizebounding domina cualquier calculo mas acotado
-6.<hours> limite de tiempo para resolver el modelo
-7.<vicinity_n> solo para modelo con cortes proactivos, que vecindad considerar. Usar solo 1
-8.<NS or reset> crear desde 0 o reiniciar el satelite. Usar solo reset
-9.<partial or leave empty> resolucion parcial progresiva de satelites. Usar partial para obtener incumbentes rapido
+1. <modelo.py> archivo con el modelo a resolver
+2. <instance> instancia a resolver, formato d{#dias}s{#escenarios}
+3. air<# airports> cantidad de aeropuertos considerados, formato air{#aeropuertos}
+4. <consolidate> consolidación de carga, opciones son Default (default) o ConsBinCont (consolidar y despues relajar)
+5. <Lmethod> calculo de L, simpleL basta ya que el sizebounding domina cualquier calculo mas acotado
+6. <hours> limite de tiempo para resolver el modelo
+7. <vicinity_n> solo para modelo con cortes proactivos, que vecindad considerar. Usar solo 1
+8. <NS or reset> crear desde 0 o reiniciar el satelite. Usar solo reset
+9. <partial or leave empty> resolucion parcial progresiva de satelites. Usar partial para obtener incumbentes rapido
 
 ## Parametros
 En Generator.py, la linea 16
