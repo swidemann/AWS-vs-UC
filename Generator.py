@@ -13,31 +13,18 @@ import math
 
 parameters_file = 'PARAMETERS.xlsx'
 
-noshow = False
-# from existing scenario 0, at most new size and vol in [original*(1-percentage/100), original*(1+percentage/100)] 
-var_percentage = 50
-# percentage of ODs that exists in every scenario
-percentage_allways_exists = 0.3 if noshow else 1 #TODO
-# probability of an OD to not show
-p_noshow = 0.3 if noshow else 0 #TODO
-# probability od an OD being mandatory
-p_mandatory = 0.1
-# cada cuanto se programa un vuelo base 6 DEFAULT
-step = 6
-# cantidad de escenarios outsample para probar Q real
-nscenarios_OUTSAMPLE = 50  #TODO
-
-
 
 def params_normal_to_lognormal(mu, sigma):
     log_mu = 2*np.log(mu) - 1/2*np.log(np.square(sigma) + np.square(mu))
     log_sigma = np.sqrt(-2*np.log(mu) + np.log(np.square(sigma) + np.square(mu)) )
     return log_mu, log_sigma
 
+
 def time_between_nodes(node1, node2):  # SCL15 MIA25 returns 10
     return abs(int(node1[3:])-int(node2[3:]))
 
-def generate_parameters(instance, n_airports=3, seed=1, seed_OUTSAMPLE=2):
+
+def generate_parameters(instance, n_airports, noshow, var_percentage, seed=1, seed_OUTSAMPLE=2):
     if seed != None:
         np.random.seed(seed)
         rd.seed(seed)
@@ -45,6 +32,19 @@ def generate_parameters(instance, n_airports=3, seed=1, seed_OUTSAMPLE=2):
     ##############
     ### Inputs ###
     ##############
+
+    # noshow: bool if noshow
+    # var_percentage: from existing scenario 0, at most new size and vol in [original*(1-percentage/100), original*(1+percentage/100)] 
+    # percentage of ODs that exists in every scenario
+    percentage_allways_exists = 0.3 if noshow else 1 #TODO
+    # probability of an OD to not show
+    p_noshow = 0.3 if noshow else 0 #TODO
+    # probability od an OD being mandatory
+    p_mandatory = 0.1
+    # cada cuanto se programa un vuelo base 6 DEFAULT
+    step = 6
+    # cantidad de escenarios outsample para probar Q real
+    nscenarios_OUTSAMPLE = 50  #TODO
 
     # Airports
     master_airports = ["SCL", "GRU", "MIA", "VCP", "UIO", "ORD"]

@@ -17,18 +17,27 @@ import time
 
 try:
     instance = sys.argv[1]
-    n_airports_str = sys.argv[2]
+    noshow_str = sys.argv[2].upper()
+    if noshow_str not in ["NOSHOW", "SHOW"]:
+        raise Exception
+    noshow = True if noshow_str == "NOSHOW" else False
+    var_percentage = int(sys.argv[3])
+    n_airports_str = sys.argv[4]
     n_airports = int(n_airports_str[n_airports_str.find("air")+3:])
-    consolidate = sys.argv[3].upper()
+    consolidate = sys.argv[5].upper()
     if consolidate not in ["DEFAULT", "CONSBIN", "CONT", "CONSCONT", "CONSBINCONT"]:
         raise Exception
-    hours = sys.argv[4]
+    hours = sys.argv[6]
     if hours == "None":
         master_time = None
     else:
         master_time = float(hours)*60*60
+    compute_Q_outsample_str = sys.argv[7].upper()    
+    if compute_Q_outsample_str not in ["QOUT", "NOQOUT"]:
+        raise Exception
+    compute_Q_outsample = True if compute_Q_outsample_str == "QOUT" else False
 except Exception as err:
-    formato = "formato: <modelo.py> <instance> air<# airports> <consolidate> <hours>"
+    formato = "formato: <modelo.py> <instance> <show or noshow> <var: 10,30,50> air<# airports> <consolidate> <hours> <Qout or noQout>"
     print(formato)
     sys.exit()
 
@@ -47,7 +56,6 @@ plot_sol = False
 write_cargo_routing = False
 write_retimings = False
 
-compute_Q_outsample = True
 
 models_dir = "Naive Models"
 solutions_dir = "Naive Solutions"
@@ -72,7 +80,7 @@ NodefileStart = 0.5  # write nodes to disk after x GB, recomended 0.5
 
 from Generator import generate_parameters, consolidate_cargo_average, generate_continous_parameters_average, generate_average_scenario
 
-days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, created_cargo_types, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, S_OUTSAMPLE, size_OUTSAMPLE, vol_OUTSAMPLE, inc_OUTSAMPLE, ex_OUTSAMPLE, mand_OUTSAMPLE, sc_OUTSAMPLE = generate_parameters(instance, n_airports)
+days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, created_cargo_types, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, S_OUTSAMPLE, size_OUTSAMPLE, vol_OUTSAMPLE, inc_OUTSAMPLE, ex_OUTSAMPLE, mand_OUTSAMPLE, sc_OUTSAMPLE = generate_parameters(instance, n_airports, noshow, var_percentage)
 Cargo_base, OD_base = Cargo, OD
 L_bigM = round( max(sum(inc[s][item] for item in Cargo) for s in S) )
 print(f"TEST L: {L_bigM}\n")

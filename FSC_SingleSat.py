@@ -20,28 +20,34 @@ import time
 
 try:
     instance = sys.argv[1]
-    n_airports_str = sys.argv[2]
+    noshow_str = sys.argv[2].upper()
+    if noshow_str not in ["NOSHOW", "SHOW"]:
+        raise Exception
+    noshow = True if noshow_str == "NOSHOW" else False
+    var_percentage = int(sys.argv[3])
+    n_airports_str = sys.argv[4]
     n_airports = int(n_airports_str[n_airports_str.find("air")+3:])
-    consolidate = sys.argv[3].upper()
+    consolidate = sys.argv[5].upper()
     if consolidate not in ["DEFAULT", "CONSBIN", "CONT", "CONSCONT", "CONSBINCONT"]:
         raise Exception
-    L_method = sys.argv[4]
+    L_method = sys.argv[6]
     if L_method not in ["solveL", "simpleL"]:
         raise Exception
-    hours = sys.argv[5]
+    hours = sys.argv[7]
     if hours == "None":
         master_time = None
     else:
         master_time = float(hours)*60*60
-    partial = False
-    if len(sys.argv) == 7:
-        partial_str = sys.argv[8].upper()
-        if partial_str == "PARTIAL":
-            partial = True
-        else:
-            raise Exception    
+    partial_str = sys.argv[8].upper()
+    if partial_str not in ["PARTIAL", "FULL"]:
+        raise Exception
+    partial = True if partial_str == "PARTIAL" else False
+    compute_Q_outsample_str = sys.argv[9].upper()    
+    if compute_Q_outsample_str not in ["QOUT", "NOQOUT"]:
+        raise Exception
+    compute_Q_outsample = True if compute_Q_outsample_str == "QOUT" else False
 except Exception as err:
-    formato = "formato: <modelo.py> <instance> air<# airports> <consolidate> <Lmethod> <hours> <NS or reset>"
+    formato = "formato: <modelo.py> <instance> <show or noshow> <var: 10,30,50> air<# airports> <consolidate> <Lmethod> <hours> <NS or reset> <satellite: partial or full> <Qout or noQout>"
     print(formato)
     sys.exit()
 
@@ -60,7 +66,6 @@ write_cargo_routing = False
 plot_convergence = False
 write_cuts = False
 
-compute_Q_outsample = True
 
 print(f"Single Satelite Reset")
 line = "Cuts added: Integers"
@@ -92,7 +97,7 @@ int_cut_times = []
 
 from Generator import generate_parameters, consolidate_cargo, generate_continous_parameters             
 
-days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, created_cargo_types, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, S_OUTSAMPLE, size_OUTSAMPLE, vol_OUTSAMPLE, inc_OUTSAMPLE, ex_OUTSAMPLE, mand_OUTSAMPLE, sc_OUTSAMPLE = generate_parameters(instance, n_airports)
+days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, created_cargo_types, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, S_OUTSAMPLE, size_OUTSAMPLE, vol_OUTSAMPLE, inc_OUTSAMPLE, ex_OUTSAMPLE, mand_OUTSAMPLE, sc_OUTSAMPLE = generate_parameters(instance, n_airports, noshow, var_percentage)
 Cargo_base, OD_base = Cargo, OD
 
 # Consolidate Cargo
