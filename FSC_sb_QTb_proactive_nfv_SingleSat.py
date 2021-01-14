@@ -45,6 +45,8 @@ try:
     if partial_str not in ["PARTIAL", "FULL"]:
         raise Exception
     partial = True if partial_str == "PARTIAL" else False
+    if partial:
+        print(" PARTIAL CUTS")
     compute_Q_outsample_str = sys.argv[10].upper()    
     if compute_Q_outsample_str not in ["QOUT", "NOQOUT"]:
         raise Exception
