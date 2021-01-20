@@ -38,7 +38,7 @@ def generate_parameters(instance, n_airports, noshow, var_percentage, seed=1, se
     # percentage of ODs that exists in every scenario
     percentage_allways_exists = 0.3 if noshow else 1 #TODO
     # probability of an OD to not show
-    p_noshow = 0.3 if noshow else 0 #TODO
+    p_noshow = 0.1 if noshow else 0 #TODO
     # probability od an OD being mandatory
     p_mandatory = 0.1
     # cada cuanto se programa un vuelo base 6 DEFAULT

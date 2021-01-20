@@ -9,9 +9,9 @@ Created on Fri Jul 19 16:40:07 2019
 from gurobipy import Model, GRB, quicksum
 import Printing as prt
 import Writing as wrt
-from L_Bound import compute_L_anticipativity_integer_no_capacity, compute_L_SSLP 
+from L_Bound import compute_L_anticipativity_integer_no_capacity, compute_L_SSLP
 from Models_master import create_master_FSC_sb, create_master_FSC_sb_ContFlow
-from Models_satellite import solve_integer_Qs_SingleSat, create_second_stage_satellites_FSC_SingleSat, update_model_Qs, update_model_Qs_ContFlow
+from Models_satellite import solve_integer_Qs, create_second_stage_satellites_FSC
 from Improvements_functions import calculate_transf_cost, generate_similar_flights, bounds_for_similar, check_best_bound
 import sys
 import statistics as st
@@ -46,7 +46,7 @@ try:
     compute_Q_outsample_str = sys.argv[9].upper()    
     if compute_Q_outsample_str not in ["QOUT", "NOQOUT"]:
         raise Exception
-    compute_Q_outsample = True if compute_Q_outsample_str == "QOUT" else False
+    compute_Q_outsample = True if compute_Q_outsample_str == "QOUT" else False      
 except Exception as err:
     formato = "formato: <modelo.py> <instance> <show or noshow> <var: 10,30,50> air<# airports> <consolidate> <Lmethod> <hours> <satellite: partial or full> <Qout or noQout>"
     print(formato)
@@ -68,8 +68,7 @@ plot_convergence = False
 write_cuts = False
 
 
-print(f"Single Satelite Reset")
-line = "Cuts added: Integer QTbound reactive global 1fv"
+line = "Cuts added: Integer QTbound reactive global 2fv"
 print("\n*** {} ***".format(line))
     
 models_dir = "FSC Models"
@@ -90,6 +89,7 @@ theta_Q = []  # pairs (theta, Q) to test the prediction
 theta_int_values = []
 Q_int_values = []
 int_cut_times = []
+
 
 ###########################
 ### Generate Parameters ###
@@ -131,15 +131,14 @@ if partial:  # partial gaps
     from Models_satellite import gaps_to_assign
     next_gap_to_solve = {}  # {y0_key: max(lastgap of Q(y0,s) for s in S) }
 #integer
-# passing s=1 to create only one model
-if not continuous_cargo:
-    int_sat, int_r1, y_sat, x_sat, w_sat, q_sat, zplus_sat, r_sat, ss6, ss7, ss10, ss11 = create_second_stage_satellites_FSC_SingleSat(days, 1, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer=True)
-    const_ss = {6: ss6, 7: ss7, 10: ss10, 11: ss11}
-else:
-    int_sat, int_r1, y_sat, f_sat, zplus_sat, r_sat, ss5_list, ss7 = create_second_stage_satellites_FSC_SingleSat(days, 1, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer=True, continuous_cargo=continuous_cargo, volperkg=volperkg, incperkg=incperkg)
-    const_ss = {5: ss5_list, 7: ss7}
+int_sat = {}  #{s: model_s}
+int_r1 = {}  #{s: constraint1: alpha_y = y_param in model_s}
 int_Q_hash = {}  #{y0_key str: Q(y tongo)}
 int_Q_bound_hash = {}  #{y0_key str: Q(y tongo) best bound}
+if not continuous_cargo:
+    int_sat, int_r1 = create_second_stage_satellites_FSC(days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer=True)
+else:
+    int_sat, int_r1 = create_second_stage_satellites_FSC(days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer=True, continuous_cargo=continuous_cargo, volperkg=volperkg, incperkg=incperkg)
 
 
 ############
@@ -155,11 +154,6 @@ proactive_bound_times = []
 ################
 ### Callback ###
 ################
-
-def actualizar_sat_r1(int_sat, int_r1, int_sat_nuevo, int_r1_nuevo):
-    int_sat = int_sat_nuevo
-    int_r1 = int_r1_nuevo
-
 
 def opt_cut(model, where):
     if where == GRB.Callback.MIPSOL:  # for a given integer first stage solution
@@ -198,16 +192,10 @@ def opt_cut(model, where):
                 Qs_bound_int = {}
                 Qs_gaps_int = {}
                 for s in S:
-                    if not continuous_cargo:
-                        ss6, ss7, ss10, ss11 = update_model_Qs(const_ss, int_sat, y_sat, x_sat, w_sat, q_sat, zplus_sat, r_sat, days, s, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv)
-                        const_ss[6], const_ss[7], const_ss[10], const_ss[11] = ss6, ss7, ss10, ss11
-                    else:
-                        ss5_list, ss7 = update_model_Qs_ContFlow(const_ss, int_sat, y_sat, f_sat, zplus_sat, r_sat, days, s, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, volperkg, incperkg)
-                        const_ss[5], const_ss[7] = ss5_list, ss7
                     if partial:
-                        Qs_int_calculated[s], Qs_bound_int[s], Qs_gaps_int[s] = solve_integer_Qs_SingleSat(y0_param, s, A, K, int_r1, int_sat, partial_gap=next_gap_to_solve[y0_key])
+                        Qs_int_calculated[s], Qs_bound_int[s], Qs_gaps_int[s] = solve_integer_Qs(y0_param, s, A, K, int_r1, int_sat, partial_gap=next_gap_to_solve[y0_key])
                     else:
-                        Qs_int_calculated[s], Qs_bound_int[s] = solve_integer_Qs_SingleSat(y0_param, s, A, K, int_r1, int_sat)
+                        Qs_int_calculated[s], Qs_bound_int[s] = solve_integer_Qs(y0_param, s, A, K, int_r1, int_sat)
                 if partial:
                     Q_av_gaps_int = sum(Qs_gaps_int[s] for s in S)/len(S)
                     if Q_av_gaps_int <= gaps_to_assign[-1]:  # av <= 1% 
@@ -253,35 +241,86 @@ def opt_cut(model, where):
 
                 # GLOBAL CUTS
                 proactive_startTime = time.time()
+                ijk_visited = []   # [(i_bar1,j_bar1,k_bar1)] already visited on the 2fv
                 # for every operated flight
-                for i_bar, j_bar in AF:                    
-                    for k_bar in K:
-                        if y0_param[i_bar, j_bar, k_bar] == 1:
+                for i_bar1, j_bar1 in AF:                    
+                    for k_bar1 in K:
+                        if y0_param[i_bar1, j_bar1, k_bar1] == 1:
+                            # evitar simetria en los cortes 2-fv
+                            ijk_visited.append( (i_bar1, j_bar1, k_bar1) )  
                             # similar flights to the observed one
-                            Similar = generate_similar_flights(y0_param, i_bar, j_bar, k_bar, AF, airports, K)
-                            if Similar != []:
-                                # QTb in this vicinity
+                            Similar1 = generate_similar_flights(y0_param, i_bar1, j_bar1, k_bar1, AF, airports, K)
+                            if Similar1 != []:
+                                # 1-fv
                                 Q_y2_p = Q_int_calculated
-                                T_y2_y1_p = sum(sc[s][(i_bar, j_bar), k_bar] for s in S)/len(S)
+                                T_y2_y1_p = sum(sc[s][(i_bar1, j_bar1), k_bar1] for s in S)/len(S)
                                 QT_bound_p = Q_y2_p + T_y2_y1_p
                                 #add global cut
-                                Omega_1 = [(i,j,k) for i,j in AF for k in K if (y0_param[i, j, k] > 0.5 and i,j not in Similar)]
-                                Omega_2 = [(i,j,k) for i,j in AF for k in K if (y0_param[i, j, k] < 0.5 and i,j not in Similar)]   
+                                Omega_1 = [(i,j,k) for i,j in AF for k in K if (y0_param[i, j, k] > 0.5 and i,j not in Similar1)]
+                                Omega_2 = [(i,j,k) for i,j in AF for k in K if (y0_param[i, j, k] < 0.5 and i,j not in Similar1)]   
                                 Delta_1 = quicksum(1 - y[0][i, j, k] for i,j,k in Omega_1) + quicksum(y[0][i, j, k] for i,j,k in Omega_2) 
-                                Delta_2 = quicksum(y[0][i, j, k] for i,j in Similar for k in K if k != k_bar) + quicksum(y[0][i_bar, j_bar, k] for k in K)
-                                a_hat, b_hat = bounds_for_similar(Similar)
-                                Delta_3 = 1 - nu_two[a_hat][b_hat, k_bar]
+                                Delta_2 = quicksum(y[0][i, j, k] for i,j in Similar1 for k in K if k != k_bar1) + quicksum(y[0][i_bar1, j_bar1, k] for k in K)
+                                a_hat, b_hat = bounds_for_similar(Similar1)
+                                Delta_3 = 1 - nu_two[a_hat][b_hat, k_bar1]
                                 # GC constraints
-                                for i,j in Similar:
+                                for i,j in Similar1:
                                     #GC1
-                                    model.cbLazy(y[0][i, j, k_bar] <= nu_one[a_hat][b_hat, k_bar])
+                                    model.cbLazy(y[0][i, j, k_bar1] <= nu_one[a_hat][b_hat, k_bar1])
                                 #GC2
-                                model.cbLazy(nu_one[a_hat][b_hat, k_bar] <= quicksum(y[0][i, j, k_bar] for i,j in Similar))
+                                model.cbLazy(nu_one[a_hat][b_hat, k_bar1] <= quicksum(y[0][i, j, k_bar1] for i,j in Similar1))
                                 #GC3
-                                model.cbLazy(2*nu_one[a_hat][b_hat, k_bar] - quicksum(y[0][i, j, k_bar] for i,j in Similar) <= nu_two[a_hat][b_hat, k_bar])
+                                model.cbLazy(2*nu_one[a_hat][b_hat, k_bar1] - quicksum(y[0][i, j, k_bar1] for i,j in Similar1) <= nu_two[a_hat][b_hat, k_bar1])
                                 #global cut
                                 model.cbLazy(theta <= QT_bound_p + (Delta_1 + Delta_2 + Delta_3)*L)
                                 model._QTbound_global_cuts += 1                            
+
+                                # 2-fv
+                                for i_bar2, j_bar2 in AF:                    
+                                    for k_bar2 in K:
+                                        if (i_bar1, j_bar1, k_bar1) != (i_bar2, j_bar2, k_bar2) and y0_param[i_bar2, j_bar2, k_bar2] == 1 and (i_bar2, j_bar2, k_bar2) not in ijk_visited:
+                                            Similar2 = generate_similar_flights(y0_param, i_bar2, j_bar2, k_bar2, AF, airports, K)
+                                            if Similar2 != []:
+                                                # revisar que no hayan nodos en comun
+                                                # TODO ver si se puede hacer con a_hat, b_hat
+                                                nodos = []
+                                                skip_observed_pair = False
+                                                for i1,j1 in Similar1:
+                                                    nodos.append(i1)
+                                                    nodos.append(j1)
+                                                for i2,j2 in Similar2:
+                                                    if i2 in nodos or j2 in nodos:
+                                                        skip_observed_pair = True
+                                                if not skip_observed_pair:
+                                                    # QTb in this vicinity
+                                                    Q_y2_p = Q_int_calculated
+                                                    T_y2_y1_p = sum(sc[s][(i_bar1, j_bar1), k_bar1] + sc[s][(i_bar2, j_bar2), k_bar2] for s in S)/len(S)
+                                                    QT_bound_p = Q_y2_p + T_y2_y1_p
+                                                    #add global cut
+                                                    Omega_1 = [(i,j,k) for i,j in AF for k in K if (y0_param[i, j, k] > 0.5 and i,j not in Similar1+Similar2)]
+                                                    Omega_2 = [(i,j,k) for i,j in AF for k in K if (y0_param[i, j, k] < 0.5 and i,j not in Similar1+Similar2)]   
+                                                    Delta_1 = quicksum(1 - y[0][i, j, k] for i,j,k in Omega_1) + quicksum(y[0][i, j, k] for i,j,k in Omega_2) 
+                                                    Delta_2_1 = quicksum(y[0][i, j, k] for i,j in Similar1 for k in K if k != k_bar1) + quicksum(y[0][i_bar1, j_bar1, k] for k in K)
+                                                    Delta_2_2 = quicksum(y[0][i, j, k] for i,j in Similar2 for k in K if k != k_bar2) + quicksum(y[0][i_bar2, j_bar2, k] for k in K)
+                                                    a_hat1, b_hat1 = bounds_for_similar(Similar1)
+                                                    a_hat2, b_hat2 = bounds_for_similar(Similar2)
+                                                    Delta_3_1 = 1 - nu_two[a_hat1][b_hat1, k_bar1]
+                                                    Delta_3_2 = 1 - nu_two[a_hat2][b_hat2, k_bar2]
+                                                    # GC constraints
+                                                    for i,j in Similar1:
+                                                        #GC1
+                                                        model.cbLazy(y[0][i, j, k_bar1] <= nu_one[a_hat1][b_hat1, k_bar1])
+                                                    for i,j in Similar2:
+                                                        #GC1
+                                                        model.cbLazy(y[0][i, j, k_bar2] <= nu_one[a_hat2][b_hat2, k_bar2])                                                
+                                                    #GC2
+                                                    model.cbLazy(nu_one[a_hat1][b_hat1, k_bar1] <= quicksum(y[0][i, j, k_bar1] for i,j in Similar1))
+                                                    model.cbLazy(nu_one[a_hat2][b_hat2, k_bar2] <= quicksum(y[0][i, j, k_bar2] for i,j in Similar2))
+                                                    #GC3
+                                                    model.cbLazy(2*nu_one[a_hat1][b_hat1, k_bar1] - quicksum(y[0][i, j, k_bar1] for i,j in Similar1) <= nu_two[a_hat1][b_hat1, k_bar1])
+                                                    model.cbLazy(2*nu_one[a_hat2][b_hat2, k_bar2] - quicksum(y[0][i, j, k_bar2] for i,j in Similar2) <= nu_two[a_hat2][b_hat2, k_bar2])
+                                                    #global cut
+                                                    model.cbLazy(theta <= QT_bound_p + (Delta_1 + Delta_2_1+Delta_2_2 + Delta_3_1+Delta_3_2)*L)
+                                                    model._QTbound_global_cuts += 1                            
                 proactive_runTime = time.time() - proactive_startTime
                 proactive_bound_times.append(proactive_runTime)
 
@@ -341,9 +380,9 @@ print("\n L method: {}, L value: {}".format(L_method, L))
 ####################
 
 if partial:
-    model_name = 'FSC sb QTb global 1-fv SingleSat partial {} i-{}'.format(L_method, instance)
+    model_name = 'FSC sb QTb global 2-fv partial {} i-{}'.format(L_method, instance)
 else:
-    model_name = 'FSC sb QTb global 1-fv SingleSat {} i-{}'.format(L_method, instance)
+    model_name = 'FSC sb QTb global 2-fv {} i-{}'.format(L_method, instance)
 model_name = noshow_str + " Var" + str(var_percentage) + " " + n_airports_str + " " + consolidate + " " + model_name
 
 if not continuous_cargo:

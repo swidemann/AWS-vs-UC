@@ -9,9 +9,9 @@ Created on Fri Jul 19 16:40:07 2019
 from gurobipy import Model, GRB, quicksum
 import Printing as prt
 import Writing as wrt
-from L_Bound import compute_L_anticipativity_integer_no_capacity, compute_L_SSLP 
+from L_Bound import compute_L_anticipativity_integer_no_capacity, compute_L_SSLP
 from Models_master import create_master_FSC_sb, create_master_FSC_sb_ContFlow
-from Models_satellite import solve_integer_Qs_SingleSat, create_second_stage_satellites_FSC_SingleSat, update_model_Qs, update_model_Qs_ContFlow
+from Models_satellite import solve_integer_Qs, create_second_stage_satellites_FSC
 from Improvements_functions import calculate_transf_cost, generate_similar_flights, bounds_for_similar, check_best_bound
 import sys
 import statistics as st
@@ -46,7 +46,7 @@ try:
     compute_Q_outsample_str = sys.argv[9].upper()    
     if compute_Q_outsample_str not in ["QOUT", "NOQOUT"]:
         raise Exception
-    compute_Q_outsample = True if compute_Q_outsample_str == "QOUT" else False
+    compute_Q_outsample = True if compute_Q_outsample_str == "QOUT" else False     
 except Exception as err:
     formato = "formato: <modelo.py> <instance> <show or noshow> <var: 10,30,50> air<# airports> <consolidate> <Lmethod> <hours> <satellite: partial or full> <Qout or noQout>"
     print(formato)
@@ -68,7 +68,6 @@ plot_convergence = False
 write_cuts = False
 
 
-print(f"Single Satelite Reset")
 line = "Cuts added: Integer QTbound reactive global 1fv"
 print("\n*** {} ***".format(line))
     
@@ -131,15 +130,14 @@ if partial:  # partial gaps
     from Models_satellite import gaps_to_assign
     next_gap_to_solve = {}  # {y0_key: max(lastgap of Q(y0,s) for s in S) }
 #integer
-# passing s=1 to create only one model
-if not continuous_cargo:
-    int_sat, int_r1, y_sat, x_sat, w_sat, q_sat, zplus_sat, r_sat, ss6, ss7, ss10, ss11 = create_second_stage_satellites_FSC_SingleSat(days, 1, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer=True)
-    const_ss = {6: ss6, 7: ss7, 10: ss10, 11: ss11}
-else:
-    int_sat, int_r1, y_sat, f_sat, zplus_sat, r_sat, ss5_list, ss7 = create_second_stage_satellites_FSC_SingleSat(days, 1, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer=True, continuous_cargo=continuous_cargo, volperkg=volperkg, incperkg=incperkg)
-    const_ss = {5: ss5_list, 7: ss7}
+int_sat = {}  #{s: model_s}
+int_r1 = {}  #{s: constraint1: alpha_y = y_param in model_s}
 int_Q_hash = {}  #{y0_key str: Q(y tongo)}
 int_Q_bound_hash = {}  #{y0_key str: Q(y tongo) best bound}
+if not continuous_cargo:
+    int_sat, int_r1 = create_second_stage_satellites_FSC(days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer=True)
+else:
+    int_sat, int_r1 = create_second_stage_satellites_FSC(days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer=True, continuous_cargo=continuous_cargo, volperkg=volperkg, incperkg=incperkg)
 
 
 ############
@@ -155,11 +153,6 @@ proactive_bound_times = []
 ################
 ### Callback ###
 ################
-
-def actualizar_sat_r1(int_sat, int_r1, int_sat_nuevo, int_r1_nuevo):
-    int_sat = int_sat_nuevo
-    int_r1 = int_r1_nuevo
-
 
 def opt_cut(model, where):
     if where == GRB.Callback.MIPSOL:  # for a given integer first stage solution
@@ -198,16 +191,10 @@ def opt_cut(model, where):
                 Qs_bound_int = {}
                 Qs_gaps_int = {}
                 for s in S:
-                    if not continuous_cargo:
-                        ss6, ss7, ss10, ss11 = update_model_Qs(const_ss, int_sat, y_sat, x_sat, w_sat, q_sat, zplus_sat, r_sat, days, s, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv)
-                        const_ss[6], const_ss[7], const_ss[10], const_ss[11] = ss6, ss7, ss10, ss11
-                    else:
-                        ss5_list, ss7 = update_model_Qs_ContFlow(const_ss, int_sat, y_sat, f_sat, zplus_sat, r_sat, days, s, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, volperkg, incperkg)
-                        const_ss[5], const_ss[7] = ss5_list, ss7
                     if partial:
-                        Qs_int_calculated[s], Qs_bound_int[s], Qs_gaps_int[s] = solve_integer_Qs_SingleSat(y0_param, s, A, K, int_r1, int_sat, partial_gap=next_gap_to_solve[y0_key])
+                        Qs_int_calculated[s], Qs_bound_int[s], Qs_gaps_int[s] = solve_integer_Qs(y0_param, s, A, K, int_r1, int_sat, partial_gap=next_gap_to_solve[y0_key])
                     else:
-                        Qs_int_calculated[s], Qs_bound_int[s] = solve_integer_Qs_SingleSat(y0_param, s, A, K, int_r1, int_sat)
+                        Qs_int_calculated[s], Qs_bound_int[s] = solve_integer_Qs(y0_param, s, A, K, int_r1, int_sat)
                 if partial:
                     Q_av_gaps_int = sum(Qs_gaps_int[s] for s in S)/len(S)
                     if Q_av_gaps_int <= gaps_to_assign[-1]:  # av <= 1% 
@@ -341,9 +328,9 @@ print("\n L method: {}, L value: {}".format(L_method, L))
 ####################
 
 if partial:
-    model_name = 'FSC sb QTb global 1-fv SingleSat partial {} i-{}'.format(L_method, instance)
+    model_name = 'FSC sb QTb global 1-fv partial {} i-{}'.format(L_method, instance)
 else:
-    model_name = 'FSC sb QTb global 1-fv SingleSat {} i-{}'.format(L_method, instance)
+    model_name = 'FSC sb QTb global 1-fv {} i-{}'.format(L_method, instance)
 model_name = noshow_str + " Var" + str(var_percentage) + " " + n_airports_str + " " + consolidate + " " + model_name
 
 if not continuous_cargo:

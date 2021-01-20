@@ -9,14 +9,13 @@ Created on Fri Jul 19 16:40:07 2019
 from gurobipy import Model, GRB, quicksum
 import Printing as prt
 import Writing as wrt
-import time
 from L_Bound import compute_L_anticipativity_integer_no_capacity, compute_L_SSLP
 from Models_master import create_master_FSC_sb, create_master_FSC_sb_ContFlow
 from Models_satellite import solve_integer_Qs_SingleSat, create_second_stage_satellites_FSC_SingleSat, solve_relaxed_Qs_SingleSat, update_model_Qs, update_model_Qs_ContFlow
 import sys
 import statistics as st
 import time
-
+import os
 
 try:
     instance = sys.argv[1]
@@ -25,8 +24,8 @@ try:
         raise Exception
     noshow = True if noshow_str == "NOSHOW" else False
     var_percentage = int(sys.argv[3])
-    n_airports_str = sys.argv[4]
-    n_airports = int(n_airports_str[n_airports_str.find("air")+3:])
+    n_airports_str = sys.argv[4].upper()
+    n_airports = int(n_airports_str[n_airports_str.find("AIR")+3:])
     consolidate = sys.argv[5].upper()
     if consolidate not in ["DEFAULT", "CONSBIN", "CONT", "CONSCONT", "CONSBINCONT"]:
         raise Exception
@@ -42,14 +41,12 @@ try:
     if partial_str not in ["PARTIAL", "FULL"]:
         raise Exception
     partial = True if partial_str == "PARTIAL" else False
-    if partial:
-        print(" PARTIAL CUTS")
     compute_Q_outsample_str = sys.argv[9].upper()    
     if compute_Q_outsample_str not in ["QOUT", "NOQOUT"]:
         raise Exception
     compute_Q_outsample = True if compute_Q_outsample_str == "QOUT" else False 
 except Exception as err:
-    formato = "formato: <modelo.py> <instance> <show or noshow> <var: 10,30,50> air<# airports> <consolidate> <Lmethod> <hours> <NS or reset> <satellite: partial or full> <Qout or noQout>"
+    formato = "formato: <modelo.py> <instance> <show or noshow> <var: 10,30,50> air<# airports> <consolidate> <Lmethod> <hours> <satellite: partial or full> <Qout or noQout>"
     print(formato)
     sys.exit()
 
@@ -288,7 +285,7 @@ if partial:
     model_name = 'FSC sb SingleSat partial {} i-{}'.format(L_method, instance)
 else:
     model_name = 'FSC sb SingleSat {} i-{}'.format(L_method, instance)
-model_name = n_airports_str + " " + consolidate + " " + model_name
+model_name = noshow_str + " Var" + str(var_percentage) + " " + n_airports_str + " " + consolidate + " " + model_name
 
 if not continuous_cargo:
     model, log_name, y, y0, theta, FSC = create_master_FSC_sb(days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, model_name, instance, L, L_method, master_time, volperkg_sb, incperkg_sb)
@@ -346,6 +343,10 @@ else:
     print("Puntos de data insuficientes")
 
 
+### MAXIMUM MEMORY USAGE
+os.system(f"grep VmPeak /proc/{os.getpid()}/status")
+
+
 ######################################
 ### SCHEDULE OUTSAMPLE PERFORMANCE ###
 ######################################
@@ -371,6 +372,7 @@ if compute_Q_outsample:
     #generate SingleSat
     int_sat, int_r1, y_sat, x_sat, w_sat, q_sat, zplus_sat, r_sat, ss6, ss7, ss10, ss11 = create_second_stage_satellites_FSC_SingleSat(days, 1, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo_base, OD_base, size_OUTSAMPLE, vol_OUTSAMPLE, ex_OUTSAMPLE, mand_OUTSAMPLE, cv, cf, ch, inc_OUTSAMPLE, lc, sc_OUTSAMPLE, delta, V, gap, tv, integer=True)
     const_ss = {6: ss6, 7: ss7, 10: ss10, 11: ss11}
+    int_sat.Params.Threads = 0  # compute Qoutsample fast using multiple threads
 
     #solve
     Qs_bound_int = {}

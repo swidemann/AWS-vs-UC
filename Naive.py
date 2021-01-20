@@ -12,8 +12,7 @@ import Writing as wrt
 import sys
 import statistics as st
 import time
-import time
-
+import os
 
 try:
     instance = sys.argv[1]
@@ -22,8 +21,8 @@ try:
         raise Exception
     noshow = True if noshow_str == "NOSHOW" else False
     var_percentage = int(sys.argv[3])
-    n_airports_str = sys.argv[4]
-    n_airports = int(n_airports_str[n_airports_str.find("air")+3:])
+    n_airports_str = sys.argv[4].upper()
+    n_airports = int(n_airports_str[n_airports_str.find("AIR")+3:])
     consolidate = sys.argv[5].upper()
     if consolidate not in ["DEFAULT", "CONSBIN", "CONT", "CONSCONT", "CONSBINCONT"]:
         raise Exception
@@ -121,7 +120,7 @@ if continuous_cargo:
 ### Model ###
 #############
 model_name = 'Naive i-{}'.format(instance)
-model_name = n_airports_str + " " + consolidate + " " + model_name
+model_name = noshow_str + " Var" + str(var_percentage) + " " + n_airports_str + " " + consolidate + " " + model_name
 
 model = Model(model_name)
 log_name = "log {}.log".format(model.ModelName)
@@ -358,6 +357,10 @@ else:
 
 
 
+### MAXIMUM MEMORY USAGE
+os.system(f"grep VmPeak /proc/{os.getpid()}/status")
+
+
 ######################################
 ### SCHEDULE OUTSAMPLE PERFORMANCE ###
 ######################################
@@ -382,6 +385,7 @@ if compute_Q_outsample:
     #generate SingleSat
     int_sat, int_r1, y_sat, x_sat, w_sat, q_sat, zplus_sat, r_sat, ss6, ss7, ss10, ss11 = create_second_stage_satellites_FSC_SingleSat(days, 1, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo_base, OD_base, size_OUTSAMPLE, vol_OUTSAMPLE, ex_OUTSAMPLE, mand_OUTSAMPLE, cv, cf, ch, inc_OUTSAMPLE, lc, sc_OUTSAMPLE, delta, V, gap, tv, integer=True)
     const_ss = {6: ss6, 7: ss7, 10: ss10, 11: ss11}
+    int_sat.Params.Threads = 0  # compute Qoutsample fast using multiple threads
 
     #solve
     Qs_bound_int = {}
@@ -404,3 +408,4 @@ if compute_Q_outsample:
     print(f"Real second stage value for the schedule: {round(Q_int_calculated, 2)}")
     print(f"Real overall = -FSC + sum(Q_s for s in S_OUTSAMPLE)/|S_OUTSAMPLE|: {round(-FSC.getValue()+Q_int_calculated, 2)}")
     print(f"Time: {performance_RunTime}, mean : {st.mean(times_list)}, min: {min(times_list)}, max: {max(times_list)}")
+

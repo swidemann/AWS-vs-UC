@@ -9,10 +9,10 @@ Created on Fri Jul 19 16:40:07 2019
 from gurobipy import Model, GRB, quicksum
 import Printing as prt
 import Writing as wrt
-from L_Bound import compute_L_anticipativity_integer_no_capacity, compute_L_SSLP 
+from L_Bound import compute_L_anticipativity_integer_no_capacity, compute_L_SSLP
 from Models_master import create_master_FSC_sb, create_master_FSC_sb_ContFlow
-from Models_satellite import solve_integer_Qs_SingleSat, create_second_stage_satellites_FSC_SingleSat, update_model_Qs, update_model_Qs_ContFlow
-from Improvements_functions import calculate_transf_cost, generate_similar_flights, bounds_for_similar, check_best_bound
+from Models_satellite import solve_integer_Qs, create_second_stage_satellites_FSC
+from Improvements_functions import calculate_transf_cost, generate_1flight_vicinity, generate_similar_flights, generate_nflights_vicinity, check_best_bound
 import sys
 import statistics as st
 import time
@@ -39,16 +39,17 @@ try:
         master_time = None
     else:
         master_time = float(hours)*60*60
-    partial_str = sys.argv[8].upper()
+    vicinity_n = int(sys.argv[8])
+    partial_str = sys.argv[9].upper()
     if partial_str not in ["PARTIAL", "FULL"]:
         raise Exception
     partial = True if partial_str == "PARTIAL" else False
-    compute_Q_outsample_str = sys.argv[9].upper()    
+    compute_Q_outsample_str = sys.argv[10].upper()    
     if compute_Q_outsample_str not in ["QOUT", "NOQOUT"]:
         raise Exception
-    compute_Q_outsample = True if compute_Q_outsample_str == "QOUT" else False
+    compute_Q_outsample = True if compute_Q_outsample_str == "QOUT" else False 
 except Exception as err:
-    formato = "formato: <modelo.py> <instance> <show or noshow> <var: 10,30,50> air<# airports> <consolidate> <Lmethod> <hours> <satellite: partial or full> <Qout or noQout>"
+    formato = "formato: <modelo.py> <instance> <show or noshow> <var: 10,30,50> air<# airports> <consolidate> <Lmethod> <hours> <vicinity_n> <satellite: partial or full> <Qout or noQout>"
     print(formato)
     sys.exit()
 
@@ -68,8 +69,7 @@ plot_convergence = False
 write_cuts = False
 
 
-print(f"Single Satelite Reset")
-line = "Cuts added: Integer QTbound reactive global 1fv"
+line = f"Cuts added: Integer QTbound reactive proactive {vicinity_n}fv"
 print("\n*** {} ***".format(line))
     
 models_dir = "FSC Models"
@@ -131,15 +131,14 @@ if partial:  # partial gaps
     from Models_satellite import gaps_to_assign
     next_gap_to_solve = {}  # {y0_key: max(lastgap of Q(y0,s) for s in S) }
 #integer
-# passing s=1 to create only one model
-if not continuous_cargo:
-    int_sat, int_r1, y_sat, x_sat, w_sat, q_sat, zplus_sat, r_sat, ss6, ss7, ss10, ss11 = create_second_stage_satellites_FSC_SingleSat(days, 1, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer=True)
-    const_ss = {6: ss6, 7: ss7, 10: ss10, 11: ss11}
-else:
-    int_sat, int_r1, y_sat, f_sat, zplus_sat, r_sat, ss5_list, ss7 = create_second_stage_satellites_FSC_SingleSat(days, 1, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer=True, continuous_cargo=continuous_cargo, volperkg=volperkg, incperkg=incperkg)
-    const_ss = {5: ss5_list, 7: ss7}
+int_sat = {}  #{s: model_s}
+int_r1 = {}  #{s: constraint1: alpha_y = y_param in model_s}
 int_Q_hash = {}  #{y0_key str: Q(y tongo)}
 int_Q_bound_hash = {}  #{y0_key str: Q(y tongo) best bound}
+if not continuous_cargo:
+    int_sat, int_r1 = create_second_stage_satellites_FSC(days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer=True)
+else:
+    int_sat, int_r1 = create_second_stage_satellites_FSC(days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer=True, continuous_cargo=continuous_cargo, volperkg=volperkg, incperkg=incperkg)
 
 
 ############
@@ -155,11 +154,6 @@ proactive_bound_times = []
 ################
 ### Callback ###
 ################
-
-def actualizar_sat_r1(int_sat, int_r1, int_sat_nuevo, int_r1_nuevo):
-    int_sat = int_sat_nuevo
-    int_r1 = int_r1_nuevo
-
 
 def opt_cut(model, where):
     if where == GRB.Callback.MIPSOL:  # for a given integer first stage solution
@@ -198,16 +192,10 @@ def opt_cut(model, where):
                 Qs_bound_int = {}
                 Qs_gaps_int = {}
                 for s in S:
-                    if not continuous_cargo:
-                        ss6, ss7, ss10, ss11 = update_model_Qs(const_ss, int_sat, y_sat, x_sat, w_sat, q_sat, zplus_sat, r_sat, days, s, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv)
-                        const_ss[6], const_ss[7], const_ss[10], const_ss[11] = ss6, ss7, ss10, ss11
-                    else:
-                        ss5_list, ss7 = update_model_Qs_ContFlow(const_ss, int_sat, y_sat, f_sat, zplus_sat, r_sat, days, s, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, volperkg, incperkg)
-                        const_ss[5], const_ss[7] = ss5_list, ss7
                     if partial:
-                        Qs_int_calculated[s], Qs_bound_int[s], Qs_gaps_int[s] = solve_integer_Qs_SingleSat(y0_param, s, A, K, int_r1, int_sat, partial_gap=next_gap_to_solve[y0_key])
+                        Qs_int_calculated[s], Qs_bound_int[s], Qs_gaps_int[s] = solve_integer_Qs(y0_param, s, A, K, int_r1, int_sat, partial_gap=next_gap_to_solve[y0_key])
                     else:
-                        Qs_int_calculated[s], Qs_bound_int[s] = solve_integer_Qs_SingleSat(y0_param, s, A, K, int_r1, int_sat)
+                        Qs_int_calculated[s], Qs_bound_int[s] = solve_integer_Qs(y0_param, s, A, K, int_r1, int_sat)
                 if partial:
                     Q_av_gaps_int = sum(Qs_gaps_int[s] for s in S)/len(S)
                     if Q_av_gaps_int <= gaps_to_assign[-1]:  # av <= 1% 
@@ -251,37 +239,34 @@ def opt_cut(model, where):
                 if write_cuts:
                     wrt.write_cuts(logs_dir, model.ModelName, FSC, theta_tongo, Q_int_calculated, runTime, integer=True, QT_bound=False, comment=comment)            
 
-                # GLOBAL CUTS
+                # PROACTIVE CUTS
                 proactive_startTime = time.time()
-                # for every operated flight
-                for i_bar, j_bar in AF:                    
-                    for k_bar in K:
-                        if y0_param[i_bar, j_bar, k_bar] == 1:
-                            # similar flights to the observed one
-                            Similar = generate_similar_flights(y0_param, i_bar, j_bar, k_bar, AF, airports, K)
-                            if Similar != []:
-                                # QTb in this vicinity
-                                Q_y2_p = Q_int_calculated
-                                T_y2_y1_p = sum(sc[s][(i_bar, j_bar), k_bar] for s in S)/len(S)
-                                QT_bound_p = Q_y2_p + T_y2_y1_p
-                                #add global cut
-                                Omega_1 = [(i,j,k) for i,j in AF for k in K if (y0_param[i, j, k] > 0.5 and i,j not in Similar)]
-                                Omega_2 = [(i,j,k) for i,j in AF for k in K if (y0_param[i, j, k] < 0.5 and i,j not in Similar)]   
-                                Delta_1 = quicksum(1 - y[0][i, j, k] for i,j,k in Omega_1) + quicksum(y[0][i, j, k] for i,j,k in Omega_2) 
-                                Delta_2 = quicksum(y[0][i, j, k] for i,j in Similar for k in K if k != k_bar) + quicksum(y[0][i_bar, j_bar, k] for k in K)
-                                a_hat, b_hat = bounds_for_similar(Similar)
-                                Delta_3 = 1 - nu_two[a_hat][b_hat, k_bar]
-                                # GC constraints
-                                for i,j in Similar:
-                                    #GC1
-                                    model.cbLazy(y[0][i, j, k_bar] <= nu_one[a_hat][b_hat, k_bar])
-                                #GC2
-                                model.cbLazy(nu_one[a_hat][b_hat, k_bar] <= quicksum(y[0][i, j, k_bar] for i,j in Similar))
-                                #GC3
-                                model.cbLazy(2*nu_one[a_hat][b_hat, k_bar] - quicksum(y[0][i, j, k_bar] for i,j in Similar) <= nu_two[a_hat][b_hat, k_bar])
-                                #global cut
-                                model.cbLazy(theta <= QT_bound_p + (Delta_1 + Delta_2 + Delta_3)*L)
-                                model._QTbound_global_cuts += 1                            
+                # create n-fv flights
+                vicinity = generate_nflights_vicinity(y0_param, A, AF, airports, K, vicinity_n)
+                for other_y in vicinity:
+                    other_y_key = ""
+                    for i,j in A:
+                        for k in K:
+                            other_y_key += str(other_y[i,j,k])                                
+                    Q_y2_p = Q_int_calculated
+                    # cost to transform from the "old" sol y0_param into the new one other_y
+                    T_y2_y1_p = calculate_transf_cost(y0_param, other_y, sc, V, gap, tv, AF, K, S)                    
+                    QT_bound_p = Q_y2_p + T_y2_y1_p
+                    model._QTbound_proactive_cblazy_calculated += 1
+                    # check if the new bound is better than the incumbent for other_y
+                    add_QTbp_other_y = False
+                    if other_y_key not in QTbound_hash.keys():  # if other_y has no previouus QTb
+                        add_QTbp_other_y = True
+                        QTbound_hash[other_y_key] = QT_bound_p
+                    elif QT_bound_p < QTbound_hash[other_y_key]:  # if the current QTb is better than the previous 
+                        add_QTbp_other_y = True
+                        QTbound_hash[other_y_key] = QT_bound_p
+                    if add_QTbp_other_y:
+                        SUP_other_y = [(i,j,k) for i,j in AF for k in K if other_y[i, j, k] > 0.5]
+                        not_SUP_other_y = [(i,j,k) for i,j in AF for k in K if other_y[i, j, k] < 0.5]   
+                        delta_callback_p = quicksum(1 - y[0][i, j, k] for i,j,k in SUP_other_y) + quicksum(y[0][i, j, k] for i,j,k in not_SUP_other_y) 
+                        model.cbLazy(theta <= (L - QT_bound_p)*delta_callback_p + QT_bound_p)
+                        model._QTbound_proactive_cblazy_added += 1
                 proactive_runTime = time.time() - proactive_startTime
                 proactive_bound_times.append(proactive_runTime)
 
@@ -306,7 +291,7 @@ def opt_cut(model, where):
                 delta_callback = quicksum(1 - y[0][i, j, k] for i,j,k in SUP_y) + quicksum(y[0][i, j, k] for i,j,k in not_SUP_y) 
                 model.cbLazy(theta <= (L - Q_int_calculated)*delta_callback + Q_int_calculated)
                 model._Q_cblazy_added += 1
-
+                
             theta_int_values.append(theta_tongo)
             Q_int_values.append(Q_int_calculated)
             # print("***** VISITED SOLUTION TWICE, NOTHING TO SOLVE. Q(y) = {:.0f} *****".format(Q_int_calculated))
@@ -341,9 +326,9 @@ print("\n L method: {}, L value: {}".format(L_method, L))
 ####################
 
 if partial:
-    model_name = 'FSC sb QTb global 1-fv SingleSat partial {} i-{}'.format(L_method, instance)
+    model_name = 'FSC sb QTb proactive partial {}-fv {} i-{}'.format(vicinity_n, L_method, instance)
 else:
-    model_name = 'FSC sb QTb global 1-fv SingleSat {} i-{}'.format(L_method, instance)
+    model_name = 'FSC sb QTb proactive {}-fv {} i-{}'.format(vicinity_n, L_method, instance)
 model_name = noshow_str + " Var" + str(var_percentage) + " " + n_airports_str + " " + consolidate + " " + model_name
 
 if not continuous_cargo:
@@ -351,14 +336,9 @@ if not continuous_cargo:
 else:
     model, log_name, y, y0, theta, FSC = create_master_FSC_sb_ContFlow(days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, model_name, instance, L, L_method, master_time, volperkg_sb, incperkg_sb)
 
-#global cut
-model._QTbound_global_cuts = 0
-nu_one = {}
-nu_two = {}
-for n in N:
-    latter_nodes = [j for i,j in AF if i[:3] == n[:3] and int(j[3:]) > int(n[3:])]
-    nu_one[n] = model.addVars(latter_nodes, K, vtype=GRB.INTEGER, name='nu_1_{}'.format(n))
-    nu_two[n] = model.addVars(latter_nodes, K, vtype=GRB.INTEGER, name='nu_2_{}'.format(n))
+#proactive cut
+model._QTbound_proactive_cblazy_calculated = 0
+model._QTbound_proactive_cblazy_added = 0
 model.update()
 
 
@@ -405,9 +385,11 @@ else:
 print("\nReactive QT Bounds computed: {}, added: {}, total time: {:.4f} , average time: {:.4f}".format(len(int_cut_times)+len(bound_times), model._QTbound_cblazy_added, sum(bound_times), av_bound_time))    
 if len(proactive_bound_times) > 0:
     av_proactive_bound_time = sum(proactive_bound_times)/len(proactive_bound_times)
+    av_proactive_bound_time_per_cut = sum(proactive_bound_times)/model._QTbound_proactive_cblazy_added
 else:
     av_proactive_bound_time = 0
-print("\nGlobal QT Bounds computed: {}, added: {}, total time: {:.4f} , average time per iteration: {:.4f}".format(model._QTbound_global_cuts, model._QTbound_global_cuts, sum(proactive_bound_times), av_proactive_bound_time))    
+    av_proactive_bound_time_per_cut = 0
+print("\nProactive QT Bounds computed: {}, added: {}, total time: {:.4f} , average time per iteration: {:.4f}, average time per cut: {:.4f}".format(model._QTbound_proactive_cblazy_calculated, model._QTbound_proactive_cblazy_added, sum(proactive_bound_times), av_proactive_bound_time, av_proactive_bound_time_per_cut))    
 
 
 print("\n *********** PREDICCION DE Q: theta vs Q ************\n ")

@@ -10,6 +10,7 @@ from gurobipy import Model, GRB, quicksum
 
 sat_gap = 0.01
 gaps_to_assign = [0.2, 0.1, 0.01]
+satThreads = 1
 
 
 #################
@@ -234,7 +235,7 @@ def solve_relaxed_Qs(y0_param, s, A, AF, K, rel_r1, rel_sat):
 #################
 
 
-def create_second_stage_satellites_FSC_SingleSat(days, s, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer, threads=1, continuous_cargo=False, volperkg=None, incperkg=None):
+def create_second_stage_satellites_FSC_SingleSat(days, s, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer, continuous_cargo=False, volperkg=None, incperkg=None):
     ########################
     ### Satellite Models ###
     ########################
@@ -439,8 +440,7 @@ def create_second_stage_satellites_FSC_SingleSat(days, s, airports, Nint, Nf, Nl
     obj = SSP_s - TRC_s - RC_s
     model.setObjective(obj, GRB.MAXIMIZE)
     model.setParam('OutputFlag', False)
-    if threads != None:
-        model.Params.Threads = threads
+    model.Params.Threads = satThreads
     # model.setParam("LogFile", "log {} {} threads.log".format(model.ModelName, model.Params.Threads))
     if sat_gap != None:
         model.setParam('MIPGap', sat_gap)
@@ -458,7 +458,7 @@ def create_second_stage_satellites_FSC_SingleSat(days, s, airports, Nint, Nf, Nl
 
 
 
-def create_second_stage_satellites_FSC(days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer, threads=1, continuous_cargo=False, volperkg=None, incperkg=None):
+def create_second_stage_satellites_FSC(days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, av, air_cap, air_vol, Cargo, OD, size, vol, ex, mand, cv, cf, ch, inc, lc, sc, delta, V, gap, tv, integer, continuous_cargo=False, volperkg=None, incperkg=None):
     ########################
     ### Satellite Models ###
     ########################
@@ -682,8 +682,7 @@ def create_second_stage_satellites_FSC(days, S, airports, Nint, Nf, Nl, N, AF, A
         obj = SSP[s] - TRC[s] - RC[s]
         model.setObjective(obj, GRB.MAXIMIZE)
         model.setParam('OutputFlag', False)
-        if threads != None:
-            model.Params.Threads = threads
+        model.Params.Threads = satThreads
         # model.setParam("LogFile", "log {} {} threads.log".format(model.ModelName, model.Params.Threads))
         if sat_gap != None:
             model.setParam('MIPGap', sat_gap)

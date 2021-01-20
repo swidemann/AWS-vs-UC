@@ -9,6 +9,7 @@ Created on Fri Jul 19 16:40:07 2019
 from gurobipy import Model, GRB, quicksum
 
 master_gap = 0.01
+masterThreads = 1
 MIPFocus = None  # 1: feasible solutions, 2: optimality, 3: bound
 NodefileStart = 0.5  # write nodes to disk after x GB, recomended 0.5
 
@@ -70,7 +71,7 @@ def create_master_FSC(days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, n, 
 
     obj = -FSC + theta
     model.setObjective(obj, GRB.MAXIMIZE)
-    model.Params.Threads = 1
+    model.Params.Threads = masterThreads
     if lazy:
         model.Params.lazyConstraints = 1
     if master_gap != None:
@@ -258,7 +259,7 @@ def create_master_FSC_sb(days, S, airports, Nint, Nf, Nl, N, AF, AG, A, K, nav, 
 
     obj = -FSC + theta
     model.setObjective(obj, GRB.MAXIMIZE)
-    model.Params.Threads = 1
+    model.Params.Threads = masterThreads
     if lazy:
         model.Params.lazyConstraints = 1
     if master_gap != None:
@@ -445,7 +446,7 @@ def create_master_FSC_sb_ContFlow(days, S, airports, Nint, Nf, Nl, N, AF, AG, A,
 
     obj = -FSC + theta
     model.setObjective(obj, GRB.MAXIMIZE)
-    model.Params.Threads = 1
+    model.Params.Threads = masterThreads
     if lazy:
         model.Params.lazyConstraints = 1
     if master_gap != None:
